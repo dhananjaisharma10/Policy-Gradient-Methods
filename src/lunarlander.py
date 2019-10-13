@@ -8,6 +8,14 @@ ACTIVATION = 'relu'
 BIAS_INITIALIZER = 'zeros'
 KERNEL_INITIALIZER = 'uniform'
 
+K = 300
 LR = 5e-4
 GAMMA = 1.0
+BATCH_SIZE = 32
+EPOCHS = 1
+LOSS = 'sparse_categorical_crossentropy'
 TRAINING_EPISODES = 50000
+TEST_EPISODES = 100
+
+# Model save directory.
+WEIGHTS = './lunarlander_weights'
