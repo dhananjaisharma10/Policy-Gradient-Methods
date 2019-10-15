@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from importlib import import_module
+
 from keras.layers import Dense
 from keras.optimizers import Adam
 from keras.initializers import VarianceScaling
@@ -55,8 +56,10 @@ class Reinforce(object):
         state = env.reset()
         while not done:
             prev_state = state
-            acts = self.model.predict(np.array(prev_state).reshape(1, -1))
-            action = np.argmax(acts)
+            probs = self.model.predict(np.array(prev_state).reshape(1, -1))
+            # Stochastic policy for choosing actions
+            action = np.random.choice(list(range(env.action_space.n)),
+                                      p=probs[0])
             state, reward, done, _ = env.step(action)
             # NOTE: Terminal states will not get added.
             states.append(prev_state)
@@ -99,13 +102,16 @@ class Reinforce(object):
             # Find the expected return of this state,
             # beginning from the last state (excluding the terminal state)
             for state in reversed(range(episode_length)):
-                # TODO: Optimize this code further.
-                for ep in range(state, episode_length):
-                    G[state] += self.cfg.GAMMA ** (ep - state) * rewards[ep]
-            G = np.array(G).flatten()
+                G[state] = rewards[state]
+                if state < episode_length - 1:
+                    G[state] += self.cfg.GAMMA * G[state + 1]
+                # for ep in range(state, episode_length):
+                #     G[state] += self.cfg.GAMMA ** (ep - state) * rewards[ep]
+            G = np.array(G)
             history = self.model.fit(states, actions,
                                      batch_size=self.cfg.BATCH_SIZE,
-                                     epochs=self.cfg.EPOCHS, sample_weight=G,
+                                     epochs=self.cfg.EPOCHS,
+                                     sample_weight=G,
                                      verbose=0)
             end = time.time()
             print('Episode {}/{} | Time elapsed: {:.2f} mins'.format(
@@ -132,9 +138,17 @@ class Reinforce(object):
                 episode_reward += reward
             cummulative_rewards.append(episode_reward)
         # Append the mean and std of rewards
-        self.mean_rewards.append(np.mean(cummulative_rewards))
-        self.std_rewards.append(np.std(cummulative_rewards))
-        filepath = osp.join(self.model_weights, 'rewards.jpg')
+        mean_reward = np.mean(cummulative_rewards)
+        std_reward = np.std(cummulative_rewards)
+        self.mean_rewards.append(mean_reward)
+        self.std_rewards.append(std_reward)
+        meanpath = osp.join(self.model_weights, 'mean_rewards.npy')
+        stdpath = osp.join(self.model_weights, 'std_rewards.npy')
+        np.save(meanpath, self.mean_rewards)
+        np.save(stdpath, self.std_rewards)
+        print('Mean reward: {:.3f} | Std: {:.3f}'.format(mean_reward,
+              std_reward))
+        filepath = osp.join(self.model_weights, 'rewards.png')
         self.plot(filepath, 'reward', '#episodes / K', self.mean_rewards,
                   self.std_rewards)
 
@@ -165,6 +179,15 @@ def main(args):
     # Create the environment.
     env = gym.make(cfg.ENV)
 
+    # Setting the session to allow growth, so it doesn't allocate all GPU
+    # memory.
+    gpu_ops = tf.GPUOptions(allow_growth=True)
+    config = tf.ConfigProto(gpu_options=gpu_ops)
+    sess = tf.Session(config=config)
+
+    # Setting this as the default tensorflow session.
+    keras.backend.tensorflow_backend.set_session(sess)
+
     # Network architecture
     input_dim = env.observation_space.shape[0]
     out_dim = env.action_space.n
@@ -187,12 +210,12 @@ def main(args):
                         bias_initializer=cfg.BIAS_INITIALIZER))
     model = keras.Sequential(layers)
     print(model.summary())
-    # TODO: Train the model using REINFORCE and plot the learning curve.
     pgm = Reinforce(model, cfg)
     pgm.train(env)
 
 
 if __name__ == '__main__':
     os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Disable AVX/FMA warnings
     tf.logging.set_verbosity(tf.logging.ERROR)
     main(sys.argv)
