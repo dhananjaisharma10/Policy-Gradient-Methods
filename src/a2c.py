@@ -73,40 +73,31 @@ class A2C(Reinforce):
         for e in range(self.cfg.TRAINING_EPISODES):
             states, actions, rewards = self.generate_episode(env)
             episode_length = len(states)
-            V = [0] * episode_length
             R = [0] * episode_length
+            V = self.critic_model.predict(states)
             # Find the expected return of this state,
             # beginning from the last state (excluding the terminal state)
+            temp = 0
             for state in reversed(range(episode_length)):
-                if state + self.n >= episode_length:
-                    V[state] = 0
-                else:
-                    # TODO: Verify this step
-                    # Do we take an argmax here or not?
-                    values = self.critic_model.predict(
-                        states[state + self.n].reshape(1, -1))
-                    # V[state] = np.max(values[0])
-                    V[state] = values[0][actions[state]]
-                R[state] = self.cfg.GAMMA ** self.n * V[state]
-                for k in range(self.n):
-                    if state + k < episode_length:
-                        temp = self.cfg.GAMMA ** k
-                        temp *= rewards[state + k]
-                        R[state] += temp
-                    else:
-                        break
+                R[state] = rewards[state]
+                R[state] += self.cfg.GAMMA * temp
+                value = 0
+                if state + self.n < episode_length:
+                    sub = self.cfg.GAMMA ** self.n * rewards[state + self.n]
+                    R[state] -= sub
+                    value = V[state + self.n]
+                temp = R[state]
+                R[state] += self.cfg.GAMMA ** self.n * value
             # Weight the cross entropy loss using (R - V)
-            values = self.critic_model.predict(states)
-            # TODO: Do we take argmax or not?
-            d = np.array(R) - np.array(values[range(episode_length), actions])
+            R = np.array(R).reshape(-1, 1)
+            d = R - V
+            d = np.squeeze(d, axis=1)
             his_act = self.model.fit(states, actions,
                                      batch_size=self.cfg.BATCH_SIZE,
                                      epochs=self.cfg.EPOCHS,
                                      sample_weight=d,
                                      verbose=0)
-            # Construct the target values for the critic model
-            values[range(episode_length), actions] = R
-            his_crt = self.critic_model.fit(states, values,
+            his_crt = self.critic_model.fit(states, R,
                                             batch_size=self.cfg.BATCH_SIZE,
                                             epochs=self.cfg.EPOCHS,
                                             verbose=0)
@@ -183,7 +174,7 @@ def main(args):
         bias_initializer=cfg.BIAS_INITIALIZER))
     action_model = keras.Sequential(actor_layers)
     critic_layers = actor_layers[:-1]
-    critic_layers.append(Dense(out_dim))  # final layer for critic
+    critic_layers.append(Dense(1))  # final layer for critic
     critic_model = keras.Sequential(critic_layers)
     print(action_model.summary())
     print(critic_model.summary())

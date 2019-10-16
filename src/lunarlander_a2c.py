@@ -2,7 +2,7 @@
 """
 
 ENV = 'LunarLander-v2'
-N = 1
+N = 20
 
 HIDDEN_LAYERS = [16, 16, 16]
 ACTIVATION = 'relu'

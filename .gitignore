@@ -8,6 +8,7 @@ __pycache__/
 
 # Sub-directories
 src/lunarlander_weights/
+src/lunarlander_weights_a2c/
 
 # VSCODE files
 .vscode/
