@@ -105,8 +105,6 @@ class Reinforce(object):
                 G[state] = rewards[state]
                 if state < episode_length - 1:
                     G[state] += self.cfg.GAMMA * G[state + 1]
-                # for ep in range(state, episode_length):
-                #     G[state] += self.cfg.GAMMA ** (ep - state) * rewards[ep]
             G = np.array(G)
             history = self.model.fit(states, actions,
                                      batch_size=self.cfg.BATCH_SIZE,
