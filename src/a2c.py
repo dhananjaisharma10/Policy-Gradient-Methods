@@ -28,7 +28,7 @@ class A2C(Reinforce):
     generate_episode() here.
     """
 
-    def __init__(self, actor_model, critic_model, cfg):
+    def __init__(self, action_model, critic_model, cfg):
         """Initializes A2C.
         Args:
             model: The actor model.
@@ -37,14 +37,14 @@ class A2C(Reinforce):
             cfg: Configuration file for the environment.
         """
 
-        self.actor_model = actor_model
+        self.model = action_model
         self.critic_model = critic_model
         self.cfg = cfg
         self.n = cfg.N
         self.optimizer_actor = Adam(self.cfg.LR_ACTOR)
-        self.actor_model.compile(optimizer=self.optimizer_actor,
-                                 loss=self.cfg.LOSS_ACTOR,
-                                 metrics=['accuracy'])
+        self.model.compile(optimizer=self.optimizer_actor,
+                           loss=self.cfg.LOSS_ACTOR,
+                           metrics=['accuracy'])
         self.optimizer_critic = Adam(self.cfg.LR_CRITIC)
         self.critic_model.compile(optimizer=self.optimizer_critic,
                                   loss=self.cfg.LOSS_CRITIC,
@@ -72,7 +72,6 @@ class A2C(Reinforce):
         print('*' * 10, 'TRAINING', '*' * 10)
         for e in range(self.cfg.TRAINING_EPISODES):
             states, actions, rewards = self.generate_episode(env)
-
             episode_length = len(states)
             V = [0] * episode_length
             R = [0] * episode_length
@@ -83,29 +82,31 @@ class A2C(Reinforce):
                     V[state] = 0
                 else:
                     # TODO: Verify this step
-                    # Do we take an argmax here?
-                    V[state] = self.critic_model(np.array(
-                        states[state + self.n]))
+                    # Do we take an argmax here or not?
+                    values = self.critic_model.predict(
+                        states[state + self.n].reshape(1, -1))
+                    # V[state] = np.max(values[0])
+                    V[state] = values[0][actions[state]]
                 R[state] = self.cfg.GAMMA ** self.n * V[state]
-                # TODO: Optimize this loop
                 for k in range(self.n):
-                    temp = self.cfg.GAMMA ** k
                     if state + k < episode_length:
+                        temp = self.cfg.GAMMA ** k
                         temp *= rewards[state + k]
+                        R[state] += temp
                     else:
-                        temp = 0
-                    R[state] += temp
+                        break
             # Weight the cross entropy loss using (R - V)
-            d = np.array(R) - np.array(V)
-            his_act = self.action_model.fit(states, actions,
-                                            batch_size=self.cfg.BATCH_SIZE,
-                                            epochs=self.cfg.EPOCHS,
-                                            sample_weight=d,
-                                            verbose=0)
-            # Construct the target values for the critic model
             values = self.critic_model.predict(states)
+            # TODO: Do we take argmax or not?
+            d = np.array(R) - np.array(values[range(episode_length), actions])
+            his_act = self.model.fit(states, actions,
+                                     batch_size=self.cfg.BATCH_SIZE,
+                                     epochs=self.cfg.EPOCHS,
+                                     sample_weight=d,
+                                     verbose=0)
+            # Construct the target values for the critic model
             values[range(episode_length), actions] = R
-            his_crt = self.action_model.fit(states, values,
+            his_crt = self.critic_model.fit(states, values,
                                             batch_size=self.cfg.BATCH_SIZE,
                                             epochs=self.cfg.EPOCHS,
                                             verbose=0)
@@ -186,7 +187,7 @@ def main(args):
     critic_model = keras.Sequential(critic_layers)
     print(action_model.summary())
     print(critic_model.summary())
-    pgm = Reinforce(action_model, critic_model, cfg)
+    pgm = A2C(action_model, critic_model, cfg)
     pgm.train(env)
 
 
