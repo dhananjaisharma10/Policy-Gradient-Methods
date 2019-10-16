@@ -174,7 +174,12 @@ def main(args):
         bias_initializer=cfg.BIAS_INITIALIZER))
     action_model = keras.Sequential(actor_layers)
     critic_layers = actor_layers[:-1]
-    critic_layers.append(Dense(1))  # final layer for critic
+    critic_layers.append(Dense(
+        1,
+        kernel_initializer=VarianceScaling(
+            distribution=cfg.KERNEL_INITIALIZER),
+        bias_initializer=cfg.BIAS_INITIALIZER)
+    )  # final layer for critic
     critic_model = keras.Sequential(critic_layers)
     print(action_model.summary())
     print(critic_model.summary())
