@@ -16,6 +16,7 @@ EPOCHS = 1
 LOSS = 'sparse_categorical_crossentropy'
 TRAINING_EPISODES = 50000
 TEST_EPISODES = 100
+EARLY_STOPPING = 50
 
 # Model save directory.
 WEIGHTS = './lunarlander_weights'

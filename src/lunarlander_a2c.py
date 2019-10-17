@@ -2,14 +2,14 @@
 """
 
 ENV = 'LunarLander-v2'
-N = 50
+N = 20
 
-HIDDEN_LAYERS = [16, 16, 16]
+HIDDEN_LAYERS = [16, 32, 16]
 ACTIVATION = 'relu'
 BIAS_INITIALIZER = 'zeros'
 KERNEL_INITIALIZER = 'uniform'
 
-K = 300
+K = 500
 LR_ACTOR = 1e-3
 LR_CRITIC = 1e-3
 GAMMA = 0.99
@@ -19,6 +19,7 @@ LOSS_ACTOR = 'sparse_categorical_crossentropy'
 LOSS_CRITIC = 'mse'
 TRAINING_EPISODES = 50000
 TEST_EPISODES = 100
+EARLY_STOPPING = 50
 
 # Model save directory.
 WEIGHTS = './lunarlander_weights_a2c'

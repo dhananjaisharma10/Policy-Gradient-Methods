@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 
 from datetime import datetime
 from importlib import import_module
+from collections import deque
 
 from keras.layers import Dense
 from keras.optimizers import Adam
@@ -35,6 +36,7 @@ class Reinforce(object):
                            metrics=['accuracy'])
         self.mean_rewards = list()
         self.std_rewards = list()
+        self.early_stopping = deque(maxlen=cfg.EARLY_STOPPING)
 
     def generate_episode(self, env, render=False):
         """Generates an episode by executing the current policy
@@ -84,7 +86,7 @@ class Reinforce(object):
         def get_run_id():
             # A unique ID for a training session
             dt = datetime.now()
-            run_id = dt.strftime('%m_%d_%H_%M')
+            run_id = dt.strftime('%m_%d_%H_%M') + '_r'
             return run_id
 
         # Create directory for this run_id
@@ -95,8 +97,14 @@ class Reinforce(object):
         start = time.time()
 
         print('*' * 10, 'TRAINING', '*' * 10)
+        training = True
+        early_stop = 0
         for e in range(self.cfg.TRAINING_EPISODES):
             states, actions, rewards = self.generate_episode(env)
+            self.early_stopping.append(sum(rewards))
+            if training and np.mean(self.early_stopping) > 200:
+                training = False
+                early_stop = e
             episode_length = len(states)
             G = [0] * episode_length
             # Find the expected return of this state,
@@ -105,18 +113,22 @@ class Reinforce(object):
                 G[state] = rewards[state]
                 if state < episode_length - 1:
                     G[state] += self.cfg.GAMMA * G[state + 1]
+            # Normalize the expected returns
             G = np.array(G)
-            history = self.model.fit(states, actions,
-                                     batch_size=self.cfg.BATCH_SIZE,
-                                     epochs=self.cfg.EPOCHS,
-                                     sample_weight=G,
-                                     verbose=0)
+            G = (G - np.mean(G)) / np.std(G)
+            if training:
+                history = self.model.fit(states, actions,
+                                         batch_size=self.cfg.BATCH_SIZE,
+                                         epochs=self.cfg.EPOCHS,
+                                         sample_weight=G,
+                                         verbose=0)
             end = time.time()
             print('Episode {}/{} | Time elapsed: {:.2f} mins'.format(
                 e + 1, self.cfg.TRAINING_EPISODES, (end - start) / 60),
                 end='\r', flush=True)
             # Test after every K episodes
             if (e + 1) % self.cfg.K == 0:
+                print('Early stopping episode:', early_stop)
                 self.test(env)
 
     def test(self, env):
@@ -190,21 +202,19 @@ def main(args):
     input_dim = env.observation_space.shape[0]
     out_dim = env.action_space.n
     layers = list()
+    init = VarianceScaling(mode='fan_avg', distribution=cfg.KERNEL_INITIALIZER)
     for i, layer in enumerate(cfg.HIDDEN_LAYERS):
         if i == 0:
             layers.append(Dense(layer, activation=cfg.ACTIVATION,
-                                kernel_initializer=VarianceScaling(
-                                    distribution=cfg.KERNEL_INITIALIZER),
+                                kernel_initializer=init,
                                 bias_initializer=cfg.BIAS_INITIALIZER,
                                 input_shape=(input_dim,)))
         else:
             layers.append(Dense(layer, activation=cfg.ACTIVATION,
-                                kernel_initializer=VarianceScaling(
-                                    distribution=cfg.KERNEL_INITIALIZER),
+                                kernel_initializer=init,
                                 bias_initializer=cfg.BIAS_INITIALIZER))
     layers.append(Dense(out_dim, activation='softmax',
-                        kernel_initializer=VarianceScaling(
-                                    distribution=cfg.KERNEL_INITIALIZER),
+                        kernel_initializer=init,
                         bias_initializer=cfg.BIAS_INITIALIZER))
     model = keras.Sequential(layers)
     print(model.summary())

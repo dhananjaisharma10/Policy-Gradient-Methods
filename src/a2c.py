@@ -13,6 +13,7 @@ import matplotlib
 
 from datetime import datetime
 from importlib import import_module
+from collections import deque
 from reinforce import Reinforce
 
 from keras.layers import Dense
@@ -51,6 +52,7 @@ class A2C(Reinforce):
                                   metrics=['accuracy'])
         self.mean_rewards = list()
         self.std_rewards = list()
+        self.early_stopping = deque(maxlen=cfg.EARLY_STOPPING)
 
     def train(self, env):
         """Train the model on TRAINING_EPISODES.
@@ -68,10 +70,19 @@ class A2C(Reinforce):
         if not osp.exists(self.model_weights):
             os.makedirs(self.model_weights)
         start = time.time()
-
+        print('Critic N:', self.n)
+        print('Actor learning rate:', self.cfg.LR_ACTOR)
+        print('Critic learning rate:', self.cfg.LR_CRITIC)
         print('*' * 10, 'TRAINING', '*' * 10)
+        training = True
         for e in range(self.cfg.TRAINING_EPISODES):
             states, actions, rewards = self.generate_episode(env)
+            self.early_stopping.append(sum(rewards))
+            # early stopping criterion
+            if training and np.mean(self.early_stopping) > 200:
+                training = False
+                print('Early stopping criterion met at episode', e)
+            rewards = np.array(rewards) / 100  # downscaling the reward
             episode_length = len(states)
             R = [0] * episode_length
             V = self.critic_model.predict(states)
@@ -83,24 +94,28 @@ class A2C(Reinforce):
                 R[state] += self.cfg.GAMMA * temp
                 value = 0
                 if state + self.n < episode_length:
-                    sub = self.cfg.GAMMA ** self.n * rewards[state + self.n]
+                    sub = (self.cfg.GAMMA ** self.n) * rewards[state + self.n]
                     R[state] -= sub
                     value = V[state + self.n]
                 temp = R[state]
-                R[state] += self.cfg.GAMMA ** self.n * value
+                R[state] += (self.cfg.GAMMA ** self.n) * value
             # Weight the cross entropy loss using (R - V)
             R = np.array(R).reshape(-1, 1)
             d = R - V
             d = np.squeeze(d, axis=1)
-            his_act = self.model.fit(states, actions,
-                                     batch_size=self.cfg.BATCH_SIZE,
-                                     epochs=self.cfg.EPOCHS,
-                                     sample_weight=d,
-                                     verbose=0)
-            his_crt = self.critic_model.fit(states, R,
-                                            batch_size=self.cfg.BATCH_SIZE,
-                                            epochs=self.cfg.EPOCHS,
-                                            verbose=0)
+            if training:
+                his_act = self.model.fit(states, actions,
+                                         batch_size=self.cfg.BATCH_SIZE,
+                                         epochs=self.cfg.EPOCHS,
+                                         sample_weight=d,
+                                         verbose=0)
+                # his_act = self.model.train_on_batch(states, actions,
+                #                                     sample_weight=d)
+                his_crt = self.critic_model.fit(states, R,
+                                                batch_size=self.cfg.BATCH_SIZE,
+                                                epochs=self.cfg.EPOCHS,
+                                                verbose=0)
+                # his_crt = self.critic_model.train_on_batch(states, R)
             end = time.time()
             print('Episode {}/{} | Time elapsed: {:.2f} mins'.format(
                 e + 1, self.cfg.TRAINING_EPISODES, (end - start) / 60),
@@ -111,7 +126,6 @@ class A2C(Reinforce):
 
 
 def parse_arguments():
-    # Command-line flags are defined here.
     # Command-line flags are defined here.
     parser = argparse.ArgumentParser(description='Parser for REINFORCEMENT')
     parser.add_argument('--env', dest='env', type=str, required=True,
@@ -150,36 +164,46 @@ def main(args):
     input_dim = env.observation_space.shape[0]
     out_dim = env.action_space.n
     actor_layers = list()
+    init = VarianceScaling(mode='fan_avg', distribution=cfg.KERNEL_INITIALIZER)
+    # Actor Model
     for i, layer in enumerate(cfg.HIDDEN_LAYERS):
         if i == 0:
             actor_layers.append(Dense(
                 layer,
                 activation=cfg.ACTIVATION,
-                kernel_initializer=VarianceScaling(
-                    distribution=cfg.KERNEL_INITIALIZER),
+                kernel_initializer=init,
                 bias_initializer=cfg.BIAS_INITIALIZER,
                 input_shape=(input_dim,)))
         else:
             actor_layers.append(Dense(
                 layer,
                 activation=cfg.ACTIVATION,
-                kernel_initializer=VarianceScaling(
-                    distribution=cfg.KERNEL_INITIALIZER),
+                kernel_initializer=init,
                 bias_initializer=cfg.BIAS_INITIALIZER))
     actor_layers.append(Dense(
         out_dim,
         activation='softmax',
-        kernel_initializer=VarianceScaling(
-            distribution=cfg.KERNEL_INITIALIZER),
-        bias_initializer=cfg.BIAS_INITIALIZER))
+        kernel_initializer=init))
     action_model = keras.Sequential(actor_layers)
-    critic_layers = actor_layers[:-1]
+    # Critic Model
+    critic_layers = list()
+    for i, layer in enumerate(cfg.HIDDEN_LAYERS):
+        if i == 0:
+            critic_layers.append(Dense(
+                layer,
+                activation=cfg.ACTIVATION,
+                kernel_initializer=init,
+                bias_initializer=cfg.BIAS_INITIALIZER,
+                input_shape=(input_dim,)))
+        else:
+            critic_layers.append(Dense(
+                layer,
+                activation=cfg.ACTIVATION,
+                kernel_initializer=init,
+                bias_initializer=cfg.BIAS_INITIALIZER))
     critic_layers.append(Dense(
         1,
-        kernel_initializer=VarianceScaling(
-            distribution=cfg.KERNEL_INITIALIZER),
-        bias_initializer=cfg.BIAS_INITIALIZER)
-    )  # final layer for critic
+        kernel_initializer=init))  # final layer for critic
     critic_model = keras.Sequential(critic_layers)
     print(action_model.summary())
     print(critic_model.summary())
