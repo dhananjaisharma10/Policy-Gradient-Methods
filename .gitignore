@@ -17,3 +17,13 @@ src/lunarlander_weights_a2c/
 /*.project
 /*.pydevproject
 /.settings
+
+# Images
+Figures/
+Figures-2/
+*.png
+
+# Numpy files
+*.npy
+
+*.pdf
