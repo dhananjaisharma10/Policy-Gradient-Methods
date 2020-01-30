@@ -25,8 +25,7 @@ matplotlib.use('Agg')
 
 class A2C(Reinforce):
     """Implementation of N-step Advantage Actor Critic.
-    This class inherits the Reinforce class, so for example, you can reuse
-    generate_episode() here.
+    This class inherits the Reinforce class
     """
 
     def __init__(self, action_model, critic_model, cfg):
@@ -82,7 +81,8 @@ class A2C(Reinforce):
             if training and np.mean(self.early_stopping) > 200:
                 training = False
                 print('Early stopping criterion met at episode', e)
-            rewards = np.array(rewards) / 100  # downscaling the reward
+            # downscaling the reward
+            rewards = np.array(rewards) / self.cfg.REWARD_DOWNSCALE
             episode_length = len(states)
             R = [0] * episode_length
             V = self.critic_model.predict(states)
@@ -104,18 +104,15 @@ class A2C(Reinforce):
             d = R - V
             d = np.squeeze(d, axis=1)
             if training:
-                his_act = self.model.fit(states, actions,
-                                         batch_size=self.cfg.BATCH_SIZE,
-                                         epochs=self.cfg.EPOCHS,
-                                         sample_weight=d,
-                                         verbose=0)
-                # his_act = self.model.train_on_batch(states, actions,
-                #                                     sample_weight=d)
-                his_crt = self.critic_model.fit(states, R,
-                                                batch_size=self.cfg.BATCH_SIZE,
-                                                epochs=self.cfg.EPOCHS,
-                                                verbose=0)
-                # his_crt = self.critic_model.train_on_batch(states, R)
+                _ = self.model.fit(states, actions,
+                                   batch_size=self.cfg.BATCH_SIZE,
+                                   epochs=self.cfg.EPOCHS,
+                                   sample_weight=d,
+                                   verbose=0)
+                _ = self.critic_model.fit(states, R,
+                                          batch_size=self.cfg.BATCH_SIZE,
+                                          epochs=self.cfg.EPOCHS,
+                                          verbose=0)
             end = time.time()
             print('Episode {}/{} | Time elapsed: {:.2f} mins'.format(
                 e + 1, self.cfg.TRAINING_EPISODES, (end - start) / 60),
@@ -130,15 +127,6 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Parser for REINFORCEMENT')
     parser.add_argument('--env', dest='env', type=str, required=True,
                         help="Configuration .py file of the environment")
-    # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-    parser_group = parser.add_mutually_exclusive_group(required=False)
-    parser_group.add_argument('--render', dest='render',
-                              action='store_true',
-                              help="Whether to render the environment.")
-    parser_group.add_argument('--no-render', dest='render',
-                              action='store_false',
-                              help="Whether to render the environment.")
-    parser.set_defaults(render=False)
     return parser.parse_args()
 
 
@@ -165,7 +153,7 @@ def main(args):
     out_dim = env.action_space.n
     actor_layers = list()
     init = VarianceScaling(mode='fan_avg', distribution=cfg.KERNEL_INITIALIZER)
-    # Actor Model
+    # ACTOR
     for i, layer in enumerate(cfg.HIDDEN_LAYERS):
         if i == 0:
             actor_layers.append(Dense(
@@ -185,7 +173,7 @@ def main(args):
         activation='softmax',
         kernel_initializer=init))
     action_model = keras.Sequential(actor_layers)
-    # Critic Model
+    # CRITIC
     critic_layers = list()
     for i, layer in enumerate(cfg.HIDDEN_LAYERS):
         if i == 0:
@@ -212,7 +200,7 @@ def main(args):
 
 
 if __name__ == '__main__':
-    os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
-    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # Disable AVX/FMA warnings
+    # os.environ['KMP_DUPLICATE_LIB_OK'] = 'True'
+    os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
     tf.logging.set_verbosity(tf.logging.ERROR)
     main(sys.argv)
