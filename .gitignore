@@ -18,7 +18,8 @@ src/lunarlander_weights_a2c/
 /*.pydevproject
 /.settings
 
-# Images
+# Images and directories
+tex/
 Figures/
 Figures-2/
 *.png
@@ -29,4 +30,5 @@ Figures-2/
 # PDF files
 *.pdf
 
+Makefile
 plot_figure.py
