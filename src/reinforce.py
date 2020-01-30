@@ -29,13 +29,12 @@ class Reinforce(object):
     def __init__(self, model, cfg):
         self.model = model
         self.cfg = cfg
-        # TODO: Define any training operations and optimizers here, initialize
-        #       your variables, or alternately compile your model here
         self.optimizer = Adam(self.cfg.LR)
         self.model.compile(optimizer=self.optimizer, loss=self.cfg.LOSS,
                            metrics=['accuracy'])
         self.mean_rewards = list()
         self.std_rewards = list()
+        # stores a definite number of past rewards to check for early stopping
         self.early_stopping = deque(maxlen=cfg.EARLY_STOPPING)
 
     def generate_episode(self, env, render=False):
@@ -80,7 +79,7 @@ class Reinforce(object):
         plt.close()
 
     def train(self, env):
-        """Train the model on TRAINING_EPISODES.
+        """Train the model.
         """
 
         def get_run_id():
@@ -101,6 +100,7 @@ class Reinforce(object):
         early_stop = 0
         for e in range(self.cfg.TRAINING_EPISODES):
             states, actions, rewards = self.generate_episode(env)
+            # Check for early stopping criterion
             self.early_stopping.append(sum(rewards))
             if training and np.mean(self.early_stopping) > 200:
                 training = False
@@ -117,18 +117,18 @@ class Reinforce(object):
             G = np.array(G)
             G = (G - np.mean(G)) / np.std(G)
             if training:
-                history = self.model.fit(states, actions,
-                                         batch_size=self.cfg.BATCH_SIZE,
-                                         epochs=self.cfg.EPOCHS,
-                                         sample_weight=G,
-                                         verbose=0)
+                _ = self.model.fit(states, actions,
+                                   batch_size=self.cfg.BATCH_SIZE,
+                                   epochs=self.cfg.EPOCHS,
+                                   sample_weight=G,
+                                   verbose=0)
             end = time.time()
             print('Episode {}/{} | Time elapsed: {:.2f} mins'.format(
                 e + 1, self.cfg.TRAINING_EPISODES, (end - start) / 60),
                 end='\r', flush=True)
             # Test after every K episodes
             if (e + 1) % self.cfg.K == 0:
-                print('Early stopping episode:', early_stop)
+                print('\nEarly stopping episode:', early_stop)
                 self.test(env)
 
     def test(self, env):
@@ -168,15 +168,6 @@ def parse_arguments():
     parser = argparse.ArgumentParser(description='Parser for REINFORCEMENT')
     parser.add_argument('--env', dest='env', type=str, required=True,
                         help="Configuration .py file of the environment")
-    # https://stackoverflow.com/questions/15008758/parsing-boolean-values-with-argparse
-    parser_group = parser.add_mutually_exclusive_group(required=False)
-    parser_group.add_argument('--render', dest='render',
-                              action='store_true',
-                              help="Whether to render the environment.")
-    parser_group.add_argument('--no-render', dest='render',
-                              action='store_false',
-                              help="Whether to render the environment.")
-    parser.set_defaults(render=False)
     return parser.parse_args()
 
 
