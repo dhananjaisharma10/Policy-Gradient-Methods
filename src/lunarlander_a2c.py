@@ -19,7 +19,8 @@ LOSS_ACTOR = 'sparse_categorical_crossentropy'
 LOSS_CRITIC = 'mse'
 TRAINING_EPISODES = 50000
 TEST_EPISODES = 100
-EARLY_STOPPING = 50
+EARLY_STOPPING = 5000
+REWARD_DOWNSCALE = 100
 
 # Model save directory.
 WEIGHTS = './lunarlander_weights_a2c'
