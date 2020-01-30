@@ -26,4 +26,7 @@ Figures-2/
 # Numpy files
 *.npy
 
+# PDF files
 *.pdf
+
+plot_figure.py
